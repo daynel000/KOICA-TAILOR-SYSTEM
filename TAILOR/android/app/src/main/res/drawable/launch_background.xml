@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Customize this file to define a splash/launch screen that matches the app theme -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Slate-950 background: #0F172A -->
+    <item android:drawable="@color/backgroundColor" />
+</layer-list>
