@@ -115,7 +115,7 @@ class _MapScreenState extends State<MapScreen> {
         return;
       }
 
-      // Get actual position
+      // ignore: deprecated_member_use
       final position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
       );

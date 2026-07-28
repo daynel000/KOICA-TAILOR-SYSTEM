@@ -80,35 +80,23 @@ class AppProvider extends ChangeNotifier {
       await _restoreAuthSession();
 
       if (authToken != null) {
-        final results = await Future.wait([
-          _apiService.getAllTailors().catchError((_) => <TailorModel>[]),
-          _apiService.getCustomerOrders(authToken!).catchError((_) => <OrderModel>[]),
-          _apiService.getCustomerProfile(authToken!).catchError((_) => const CustomerModel(
-            customerId: 'c1',
-            fullName: 'Customer',
-            emailAddress: 'user@example.com',
-            phoneNumber: '09123456789',
-            cityLocation: 'Manila',
-            avatarImageUrl: '',
-            accountTier: 'standard',
-            memberSince: '2026',
-          )),
-        ]);
+        final tailors = await _apiService.getAllTailors().catchError((_) => <TailorModel>[]);
+        final orders = await _apiService.getCustomerOrders(authToken!, currentCustomer?.customerId ?? '').catchError((_) => <OrderModel>[]);
+        final profile = await _apiService.getCustomerProfile(authToken!).catchError((_) => null);
 
-        tailorList = results[0] as List<TailorModel>;
-        final apiOrders = results[1] as List<OrderModel>;
-        currentCustomer = results[2] as CustomerModel;
-        
-        final localOrders = await OrderRepository.getCustomerOrders();
-        orderList = apiOrders.isNotEmpty ? apiOrders : localOrders;
+        tailorList = tailors;
+        orderList = orders;
+        if (profile != null) {
+          currentCustomer = profile;
+        }
       } else {
         tailorList = await _apiService.getAllTailors().catchError((_) => <TailorModel>[]);
-        orderList = await OrderRepository.getCustomerOrders();
+        orderList = [];
       }
 
       await _loadSavedScanResult();
     } catch (_) {
-      orderList = await OrderRepository.getCustomerOrders();
+      orderList = [];
     } finally {
       isLoadingInitialData = false;
       notifyListeners();
@@ -118,7 +106,11 @@ class AppProvider extends ChangeNotifier {
   /// Reloads customer orders from persistent repository/API.
   Future<void> refreshOrders() async {
     try {
-      orderList = await OrderRepository.getCustomerOrders();
+      if (authToken != null && currentCustomer != null) {
+        orderList = await _apiService.getCustomerOrders(authToken!, currentCustomer!.customerId);
+      } else {
+        orderList = await OrderRepository.getCustomerOrders();
+      }
     } catch (_) {}
     notifyListeners();
   }
@@ -140,10 +132,14 @@ class AppProvider extends ChangeNotifier {
     currentCustomer = CustomerModel.fromJson(
       result['customer'] as Map<String, dynamic>,
     );
-    await _saveAuthSession(authToken!);
+    await _saveAuthSession(authToken!, currentCustomer!);
 
-    // Reload orders now that we're logged in
-    orderList = await _apiService.getCustomerOrders(authToken!);
+    // Load real orders from backend for this logged-in customer
+    try {
+      orderList = await _apiService.getCustomerOrders(authToken!, currentCustomer!.customerId);
+    } catch (_) {
+      orderList = [];
+    }
     notifyListeners();
   }
 
@@ -210,12 +206,17 @@ class AppProvider extends ChangeNotifier {
       inseam: (orderFormData['inseam_measurement_inches'] as num?)?.toDouble() ?? 29.0,
     );
 
-    if (authToken != null && authToken!.isNotEmpty) {
+    if (authToken != null && authToken!.isNotEmpty && currentCustomer != null) {
       try {
+        orderFormData['customer_id'] = currentCustomer!.customerId;
+        
         await _apiService.createOrder(
           authToken: authToken!,
           orderData: orderFormData,
         );
+        
+        // Refresh orders from backend to get the real ID and dates
+        await refreshOrders();
       } catch (_) {}
     }
 
@@ -309,28 +310,54 @@ class AppProvider extends ChangeNotifier {
     required String fullName,
     required String username,
     String? email,
+    String? phoneNumber,
+    String? cityLocation,
+    String? customerId,
+    String? authTokenValue,
   }) async {
     currentCustomer = CustomerModel(
-      customerId: 'c1',
+      customerId: customerId ?? 'c1',
       fullName: fullName,
       emailAddress: email ?? '$username@tailorconnect.com',
-      phoneNumber: '+63 917 888 9999',
-      cityLocation: 'Metro Manila',
+      phoneNumber: phoneNumber ?? '',
+      cityLocation: cityLocation ?? '',
       avatarImageUrl: '',
-      accountTier: 'VIP Member',
+      accountTier: 'standard',
       memberSince: '2026',
     );
+    if (authTokenValue != null) {
+      authToken = authTokenValue;
+    }
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('customer_full_name', fullName);
     await prefs.setString('customer_username', username);
-    // Load orders from shared repository so customer sees latest
-    orderList = await OrderRepository.getCustomerOrders();
+    await prefs.setString('customer_email', email ?? '');
+    await prefs.setString('customer_phone', phoneNumber ?? '');
+    await prefs.setString('customer_city', cityLocation ?? '');
+    await prefs.setString('customer_id', customerId ?? '');
+    // Load real orders from backend
+    try {
+      if (authToken != null) {
+        orderList = await _apiService.getCustomerOrders(authToken!, currentCustomer?.customerId ?? customerId ?? '');
+      } else {
+        orderList = [];
+      }
+    } catch (_) {
+      orderList = [];
+    }
     notifyListeners();
   }
 
-  Future<void> _saveAuthSession(String token) async {
+  Future<void> _saveAuthSession(String token, [CustomerModel? customer]) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_authTokenStorageKey, token);
+    if (customer != null) {
+      await prefs.setString('customer_full_name', customer.fullName);
+      await prefs.setString('customer_email', customer.emailAddress);
+      await prefs.setString('customer_phone', customer.phoneNumber);
+      await prefs.setString('customer_city', customer.cityLocation);
+      await prefs.setString('customer_id', customer.customerId);
+    }
   }
 
   Future<void> _restoreAuthSession() async {
@@ -338,15 +365,19 @@ class AppProvider extends ChangeNotifier {
     authToken = prefs.getString(_authTokenStorageKey);
     final savedName = prefs.getString('customer_full_name');
     final savedUser = prefs.getString('customer_username');
+    final savedEmail = prefs.getString('customer_email') ?? '';
+    final savedPhone = prefs.getString('customer_phone') ?? '';
+    final savedCity = prefs.getString('customer_city') ?? '';
+    final savedId = prefs.getString('customer_id') ?? '';
     if (savedName != null && savedName.isNotEmpty) {
       currentCustomer = CustomerModel(
-        customerId: 'c1',
+        customerId: savedId.isNotEmpty ? savedId : 'c1',
         fullName: savedName,
-        emailAddress: '${savedUser ?? "customer"}@tailorconnect.com',
-        phoneNumber: '+63 917 888 9999',
-        cityLocation: 'Metro Manila',
+        emailAddress: savedEmail.isNotEmpty ? savedEmail : '${savedUser ?? "customer"}@tailorconnect.com',
+        phoneNumber: savedPhone,
+        cityLocation: savedCity,
         avatarImageUrl: '',
-        accountTier: 'VIP Member',
+        accountTier: 'standard',
         memberSince: '2026',
       );
     }

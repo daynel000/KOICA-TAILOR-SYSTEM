@@ -7,30 +7,30 @@ class TailorSession {
   static const String _keyFullName   = 'tailor_full_name';
   static const String _keyShopName   = 'tailor_shop_name';
 
-  static int?    currentTailorId;
-  static int?    currentProfileId;
+  static String? currentTailorId;
+  static String? currentProfileId;
   static String? currentFullName;
   static String? currentShopName;
 
   /// Load persisted session from SharedPreferences on app startup.
   static Future<void> loadSession() async {
     final prefs = await SharedPreferences.getInstance();
-    currentTailorId  = prefs.getInt(_keyUserId);
-    currentProfileId = prefs.getInt(_keyProfileId);
+    currentTailorId  = prefs.getString(_keyUserId);
+    currentProfileId = prefs.getString(_keyProfileId);
     currentFullName  = prefs.getString(_keyFullName);
     currentShopName  = prefs.getString(_keyShopName);
   }
 
   /// Save session after a successful tailor login.
   static Future<void> saveSession({
-    required int    userId,
-    required int    profileId,
+    required String userId,
+    required String profileId,
     required String fullName,
     required String shopName,
   }) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_keyUserId,      userId);
-    await prefs.setInt(_keyProfileId,   profileId);
+    await prefs.setString(_keyUserId,      userId);
+    await prefs.setString(_keyProfileId,   profileId);
     await prefs.setString(_keyFullName, fullName);
     await prefs.setString(_keyShopName, shopName);
 

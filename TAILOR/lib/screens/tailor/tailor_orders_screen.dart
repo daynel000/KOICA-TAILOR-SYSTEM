@@ -29,22 +29,12 @@ class _TailorOrdersScreenState extends State<TailorOrdersScreen> {
   void initState() { super.initState(); _loadOrders(); }
 
   Future<void> _loadOrders() async {
-    // Always load from the shared OrderRepository first (includes customer requests)
-    final localOrders = await OrderRepository.getTailorOrdersRaw(
-      TailorSession.currentProfileId,
-      TailorSession.currentShopName,
-    );
     try {
       final apiOrders = await _api.fetchOrders();
-      // Merge: prefer API orders but also include any local ones not in API list
-      final apiIds = apiOrders.map((o) => o['order_id'].toString()).toSet();
-      final localOnly = localOrders.where((o) => !apiIds.contains(o['order_id'].toString())).toList();
-      final merged = [...apiOrders, ...localOnly];
-      setState(() { _allOrders = merged; _applyFilter(_activeFilter); _isLoading = false; });
+      setState(() { _allOrders = apiOrders; _applyFilter(_activeFilter); _isLoading = false; });
     } catch (e) {
       setState(() {
-        _allOrders = localOrders;
-        _applyFilter(_activeFilter);
+        _errorMessage = e.toString().replaceAll('Exception: ', '');
         _isLoading = false;
       });
     }
@@ -292,9 +282,7 @@ class _TailorOrdersScreenState extends State<TailorOrdersScreen> {
                   // Persist to shared OrderRepository so the Customer app sees the update
                   await OrderRepository.updateOrderStatus(orderId, selectedStatus, selectedProgress.toInt());
                   try {
-                    if (orderId is int) {
-                      await _api.updateOrderStatus(orderId, selectedStatus, selectedProgress.toInt());
-                    }
+                    await _api.updateOrderStatus(orderId.toString(), selectedStatus, selectedProgress.toInt());
                   } catch (_) {}
                   if (context.mounted) Navigator.pop(context);
                   _loadOrders();

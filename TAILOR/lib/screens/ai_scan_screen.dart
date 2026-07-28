@@ -84,27 +84,30 @@ class _AIScanScreenState extends State<AIScanScreen> with TickerProviderStateMix
         debugPrint('availableCameras failed: $e');
       }
 
+      if (_cameras.isEmpty) {
+        if (mounted) {
+          setState(() {
+            _cameraInitializationError = null;
+            _isCameraInitialized = false;
+            _isCameraInitializing = false;
+          });
+        }
+        return;
+      }
+
       CameraDescription selectedCamera;
-      if (_cameras.isNotEmpty) {
+      try {
+        selectedCamera = _cameras.firstWhere(
+          (c) => c.lensDirection == CameraLensDirection.back,
+        );
+      } catch (_) {
         try {
           selectedCamera = _cameras.firstWhere(
-            (c) => c.lensDirection == CameraLensDirection.back,
+            (c) => c.lensDirection == CameraLensDirection.front,
           );
         } catch (_) {
-          try {
-            selectedCamera = _cameras.firstWhere(
-              (c) => c.lensDirection == CameraLensDirection.front,
-            );
-          } catch (_) {
-            selectedCamera = _cameras.first;
-          }
+          selectedCamera = _cameras.first;
         }
-      } else {
-        selectedCamera = const CameraDescription(
-          name: 'default',
-          lensDirection: CameraLensDirection.back,
-          sensorOrientation: 0,
-        );
       }
 
       _cameraController = CameraController(
@@ -121,10 +124,10 @@ class _AIScanScreenState extends State<AIScanScreen> with TickerProviderStateMix
         });
       }
     } catch (e) {
-      debugPrint('Error initializing camera: $e');
+      debugPrint('Error initializing camera stream: $e');
       if (mounted) {
         setState(() {
-          _cameraInitializationError = e.toString();
+          _cameraInitializationError = null;
           _isCameraInitialized = false;
           _isCameraInitializing = false;
         });
@@ -162,6 +165,28 @@ class _AIScanScreenState extends State<AIScanScreen> with TickerProviderStateMix
       await _runScanWithImage(bytes);
     } catch (e) {
       widget.onShowToast('Failed to capture photo: $e');
+    }
+  }
+
+  Future<void> _takePhotoWithCamera() async {
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? photo = await picker.pickImage(
+        source: ImageSource.camera,
+        maxWidth: 1080,
+        maxHeight: 1350,
+      );
+
+      if (photo == null) return;
+
+      final Uint8List bytes = await photo.readAsBytes();
+      setState(() {
+        _capturedBytes = bytes;
+      });
+
+      await _runScanWithImage(bytes);
+    } catch (e) {
+      widget.onShowToast('Failed to open camera: $e');
     }
   }
 
@@ -270,14 +295,15 @@ class _AIScanScreenState extends State<AIScanScreen> with TickerProviderStateMix
 
               // Action buttons
               if (_scanState == 'idle') ...[
-                Row(
+                Column(
                   children: [
                     if (_isCameraInitialized) ...[
-                      Expanded(
+                      SizedBox(
+                        width: double.infinity,
                         child: ElevatedButton.icon(
                           onPressed: _captureAndScan,
                           icon: const Icon(Icons.camera_alt_rounded, size: 20),
-                          label: const Text('Capture & Scan', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                          label: const Text('Capture Live Stream', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.primary,
                             foregroundColor: Colors.white,
@@ -286,20 +312,38 @@ class _AIScanScreenState extends State<AIScanScreen> with TickerProviderStateMix
                           ),
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(height: 12),
                     ],
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: _uploadAndScan,
-                        icon: const Icon(Icons.photo_library_rounded, size: 20),
-                        label: const Text('Upload Photo', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.primaryLight,
-                          side: const BorderSide(color: AppColors.primary),
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: _takePhotoWithCamera,
+                            icon: const Icon(Icons.camera_rounded, size: 20),
+                            label: const Text('Take Photo', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primary,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            ),
+                          ),
                         ),
-                      ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: _uploadAndScan,
+                            icon: const Icon(Icons.photo_library_rounded, size: 20),
+                            label: const Text('Upload Photo', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppColors.primaryLight,
+                              side: const BorderSide(color: AppColors.primary),
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -410,72 +454,37 @@ class _AIScanScreenState extends State<AIScanScreen> with TickerProviderStateMix
                 ),
               ),
 
-            // 3. Body silhouette icon + guidance if camera is NOT running/initialized, or if there is no captured image
+            // 3. Body silhouette icon + guidance if camera stream is not running
             if (_capturedBytes == null && !_isCameraInitialized && !_isCameraInitializing)
               Center(
-                child: _cameraInitializationError != null
-                    ? Padding(
-                        padding: const EdgeInsets.all(24.0),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(
-                              Icons.error_outline_rounded,
-                              size: 48,
-                              color: AppColors.red,
-                            ),
-                            const SizedBox(height: 12),
-                            Text(
-                              'Camera Access Unavailable',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              _cameraInitializationError!,
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
-                            ),
-                            const SizedBox(height: 12),
-                            TextButton.icon(
-                              onPressed: _initializeCamera,
-                              icon: const Icon(Icons.refresh_rounded, size: 16, color: AppColors.primaryLight),
-                              label: const Text(
-                                'Retry Camera Access',
-                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.primaryLight),
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    : Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.accessibility_new_rounded,
-                            size: 96,
-                            color: AppColors.primary.withOpacity(0.25),
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            'Stand in frame',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            'Keep 1.5–2 m from camera\nArms slightly away from body',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(fontSize: 11, color: AppColors.textMuted),
-                          ),
-                        ],
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.accessibility_new_rounded,
+                      size: 84,
+                      color: AppColors.primaryLight.withOpacity(0.4),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Full-Body AI Scan',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
                       ),
+                    ),
+                    const SizedBox(height: 6),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: Text(
+                        'Tap "Take Photo" or "Upload Photo" below to capture your full body for GPT-4o AI measurement analysis.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 11, color: AppColors.textMuted, height: 1.4),
+                      ),
+                    ),
+                  ],
+                ),
               ),
 
             // 4. Alignment guide silhouette overlay when camera is live
@@ -553,9 +562,9 @@ class _AIScanScreenState extends State<AIScanScreen> with TickerProviderStateMix
 
   List<Widget> _buildMeasurementLines() {
     final lines = [
-      (0.30, 'Chest', _scanResult?.chestInches, AppColors.primaryLight),
-      (0.48, 'Waist', _scanResult?.waistInches, AppColors.emerald),
-      (0.65, 'Hips', _scanResult?.hipsInches, AppColors.amber),
+      (0.30, 'Chest Circ.', _scanResult?.chestCircumference, AppColors.primaryLight),
+      (0.48, 'Waist', _scanResult?.waistCircumference, AppColors.emerald),
+      (0.65, 'Hips', _scanResult?.hipsCircumference, AppColors.amber),
     ];
     return lines.map((l) => Positioned(
       top: null, bottom: null, left: 0, right: 0,
@@ -596,11 +605,13 @@ class _AIScanScreenState extends State<AIScanScreen> with TickerProviderStateMix
         const SizedBox(height: 12),
         GridView.count(crossAxisCount: 2, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), mainAxisSpacing: 8, crossAxisSpacing: 8, childAspectRatio: 3,
           children: [
-            _MeasCell('Chest', '${result.chestInches}"', AppColors.primaryLight),
-            _MeasCell('Waist', '${result.waistInches}"', AppColors.emerald),
-            _MeasCell('Hips', '${result.hipsInches}"', AppColors.amber),
-            _MeasCell('Shoulders', '${result.shouldersInches}"', AppColors.textSecondary),
-            _MeasCell('Inseam', '${result.inseamInches.toStringAsFixed(1)}"', AppColors.textSecondary),
+            _MeasCell('Body Length', '${result.bodyLength}"', AppColors.textSecondary),
+            _MeasCell('Shoulders', '${result.shoulderWidth}"', AppColors.textSecondary),
+            _MeasCell('Chest Circ.', '${result.chestCircumference}"', AppColors.primaryLight),
+            _MeasCell('Waist', '${result.waistCircumference}"', AppColors.emerald),
+            _MeasCell('Hips', '${result.hipsCircumference}"', AppColors.amber),
+            _MeasCell('Arm Length', '${result.armLength}"', AppColors.textSecondary),
+            _MeasCell('Biceps', '${result.bicepCircumference}"', AppColors.textSecondary),
             _MeasCell('Accuracy', result.confidencePercent, AppColors.emerald),
           ],
         ),

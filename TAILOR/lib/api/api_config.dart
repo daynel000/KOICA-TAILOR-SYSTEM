@@ -19,10 +19,10 @@ class ApiConfig {
   /// Base URL of the Python FastAPI backend server.
   /// Example local dev: 'http://192.168.1.100:8000'
   /// Example production: 'https://api.tailorconnect.ph'
-  static const String baseUrl = 'http://192.168.1.100:8000';
+  static const String baseUrl = 'http://192.168.254.48:5000';
 
   /// API version prefix (update if backend changes versions)
-  static const String apiVersion = '/api/v1';
+  static const String apiVersion = '/api';
 
   /// Full API base path
   static String get apiBaseUrl => '$baseUrl$apiVersion';
@@ -41,5 +41,5 @@ class ApiConfig {
       };
 
   /// Request timeout duration
-  static const Duration requestTimeout = Duration(milliseconds: 500);
+  static const Duration requestTimeout = Duration(seconds: 30);
 }

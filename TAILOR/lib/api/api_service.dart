@@ -72,7 +72,7 @@ class ApiService {
   }
 
   /// Fetches the profile of the currently logged-in customer.
-  /// GET /api/v1/customer/me
+  /// GET /api/customer/me
   Future<CustomerModel> getCustomerProfile(String authToken) async {
     final response = await _httpClient
         .get(
@@ -122,35 +122,79 @@ class ApiService {
   // ----------------------------------------------------------
 
   /// Fetches all orders for the logged-in customer.
-  /// GET /api/v1/orders
-  Future<List<OrderModel>> getCustomerOrders(String authToken) async {
+  /// GET /api/orders/me
+  Future<List<OrderModel>> getCustomerOrders(String authToken, String customerId) async {
     final response = await _httpClient
         .get(
-          Uri.parse('${ApiConfig.apiBaseUrl}/orders'),
+          Uri.parse('${ApiConfig.apiBaseUrl}/orders/customer/$customerId'),
           headers: ApiConfig.authHeaders(authToken),
         )
         .timeout(ApiConfig.requestTimeout);
-    final List<dynamic> data =
-        _handleJsonResponse(response) as List<dynamic>;
-    return data.map((json) => OrderModel.fromJson(json as Map<String, dynamic>)).toList();
+    final Map<String, dynamic> body =
+        _handleJsonResponse(response) as Map<String, dynamic>;
+    final List<dynamic> data = (body['data'] ?? []) as List<dynamic>;
+    return data.map((json) {
+      final map = json as Map<String, dynamic>;
+      // Normalize DB field names to what OrderModel.fromJson expects
+      return OrderModel.fromJson({
+        'order_id': map['id']?.toString() ?? '0',
+        'tailor_id': map['tailor_id']?.toString() ?? '',
+        'tailor_shop_name': map['tailor_shop_name'] ?? '',
+        'garment_type': map['garment_type'] ?? '',
+        'clothing_type': map['garment_type'] ?? '',
+        'fabric_material': '',
+        'status': map['status'] ?? 'submitted',
+        'progress_percent': map['progress_percent'] ?? 0,
+        'status_updated_date': map['created_at']?.toString().split(' ').first ?? 'Recent',
+        'estimated_completion_date': map['due_date']?.toString() ?? 'TBD',
+        'customer_notes': map['notes'] ?? '',
+        'chest_measurement_inches': 0.0,
+        'waist_measurement_inches': 0.0,
+        'hips_measurement_inches': 0.0,
+        'shoulders_measurement_inches': 0.0,
+        'inseam_measurement_inches': 0.0,
+        'inspiration_image_url': null,
+        'chat_messages': [],
+        'order_created_date': map['created_at']?.toString().split(' ').first ?? 'Today',
+      });
+    }).toList();
   }
 
   /// Submits a new tailoring order.
-  /// POST /api/v1/orders
+  /// POST /api/orders/customer_submit
   Future<OrderModel> createOrder({
     required String authToken,
     required Map<String, dynamic> orderData,
   }) async {
     final response = await _httpClient
         .post(
-          Uri.parse('${ApiConfig.apiBaseUrl}/orders'),
+          Uri.parse('${ApiConfig.apiBaseUrl}/orders/customer_submit'),
           headers: ApiConfig.authHeaders(authToken),
           body: jsonEncode(orderData),
         )
         .timeout(ApiConfig.requestTimeout);
-    return OrderModel.fromJson(
-      _handleJsonResponse(response) as Map<String, dynamic>,
-    );
+    _handleJsonResponse(response); // throws on error
+    // Return a minimal OrderModel from the submitted data
+    return OrderModel.fromJson({
+      'order_id': '0',
+      'tailor_id': orderData['tailor_id']?.toString() ?? '',
+      'tailor_shop_name': '',
+      'garment_type': orderData['clothing_type'] ?? '',
+      'status': 'submitted',
+      'progress_percent': 0,
+      'status_updated_date': 'Just now',
+      'estimated_completion_date': 'TBD',
+      'customer_notes': orderData['notes'] ?? '',
+      'chest_measurement_inches': 0.0,
+      'waist_measurement_inches': 0.0,
+      'hips_measurement_inches': 0.0,
+      'shoulders_measurement_inches': 0.0,
+      'inseam_measurement_inches': 0.0,
+      'fabric_material': '',
+      'inspiration_image_url': null,
+      'chat_messages': [],
+      'order_created_date': 'Today',
+    });
   }
 
   /// Sends a chat message in an order thread.

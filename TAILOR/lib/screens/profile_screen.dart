@@ -59,8 +59,6 @@ class ProfileScreen extends StatelessWidget {
           Row(children: [
             _StatBox('${provider.orderList.length}', 'Orders'),
             const SizedBox(width: 8),
-            _StatBox('5.0', 'Rating', valueColor: AppColors.emerald),
-            const SizedBox(width: 8),
             _StatBox(scan?.recommendedSize ?? '--', 'Scan Size', valueColor: AppColors.primaryLight),
           ]),
           const SizedBox(height: 16),
@@ -76,11 +74,14 @@ class ProfileScreen extends StatelessWidget {
               ? Column(children: [
                   GridView.count(crossAxisCount: 3, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), mainAxisSpacing: 8, crossAxisSpacing: 8, childAspectRatio: 2.2,
                     children: [
-                      _MeasTile('Chest', '${scan.chestInches}"'),
-                      _MeasTile('Waist', '${scan.waistInches}"'),
-                      _MeasTile('Hips', '${scan.hipsInches}"'),
-                      _MeasTile('Shoulders', '${scan.shouldersInches}"'),
-                      _MeasTile('Inseam', '${scan.inseamInches.toStringAsFixed(1)}"'),
+                      _MeasTile('Body Length', '${scan.bodyLength}"'),
+                      _MeasTile('Shoulders', '${scan.shoulderWidth}"'),
+                      _MeasTile('Chest Width', '${scan.chestWidth}"'),
+                      _MeasTile('Chest Circ.', '${scan.chestCircumference}"'),
+                      _MeasTile('Arm Length', '${scan.armLength}"'),
+                      _MeasTile('Biceps', '${scan.bicepCircumference}"'),
+                      _MeasTile('Waist', '${scan.waistCircumference}"'),
+                      _MeasTile('Hips', '${scan.hipsCircumference}"'),
                       _MeasTile('Size', scan.recommendedSize, valueColor: AppColors.primaryLight),
                     ],
                   ),
@@ -172,7 +173,7 @@ class _StatBox extends StatelessWidget {
     padding: const EdgeInsets.symmetric(vertical: 12),
     decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.border)),
     child: Column(children: [
-      Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: valueColor ?? Colors.white)),
+      Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: valueColor ?? AppColors.brandNavy)),
       const SizedBox(height: 3),
       Text(label, style: TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: AppColors.textMuted, letterSpacing: 0.5)),
     ]),

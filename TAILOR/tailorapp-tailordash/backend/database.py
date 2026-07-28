@@ -1,93 +1,140 @@
-import mysql.connector
-from mysql.connector import Error
+"""
+database.py — Supabase client for TailorSystem backend.
 
-# ─── Database Connection Settings ───────────────────────────────────────────
-# Change these values to match your XAMPP MySQL setup
-DATABASE_HOST     = "localhost"
-DATABASE_USER     = "root"
-DATABASE_PASSWORD = ""           # Default XAMPP password is empty
-DATABASE_NAME     = "tailor_connect_db"
+Replaces the old mysql.connector setup.
+Uses the Supabase Python SDK (supabase-py) with the SERVICE_ROLE key
+so the Flask backend can bypass RLS and do anything.
 
-def create_database_connection():
+Install:  pip install supabase
+"""
+import os
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+from supabase import create_client, Client as SupabaseClient
+
+SUPABASE_URL = os.environ.get('SUPABASE_URL', '')
+SUPABASE_SERVICE_KEY = os.environ.get('SUPABASE_SERVICE_KEY', '')
+
+# Singleton client — created once, reused for all requests
+_client: SupabaseClient | None = None
+
+
+def get_client() -> SupabaseClient:
+    """Return the shared Supabase service-role client."""
+    global _client
+    if _client is None:
+        if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+            raise RuntimeError(
+                'SUPABASE_URL and SUPABASE_SERVICE_KEY must be set in your .env file.'
+            )
+        _client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+    return _client
+
+_anon_client: SupabaseClient | None = None
+def get_anon_client() -> SupabaseClient:
+    """Return an anon client for authentication to avoid mutating the service role client."""
+    global _anon_client
+    if _anon_client is None:
+        anon_key = os.environ.get('SUPABASE_ANON_KEY', '')
+        _anon_client = create_client(SUPABASE_URL, anon_key)
+    return _anon_client
+
+
+def sb_select(table: str, filters: dict | None = None, select: str = '*') -> list:
     """
-    Connect to the MySQL database running on XAMPP.
-    Returns the connection object if successful, or None if failed.
+    SELECT rows from a Supabase table.
+    filters: {column: value, ...} — all applied as equality (eq) filters.
+    Returns a list of dicts (one per row), or [] on error.
     """
     try:
-        connection = mysql.connector.connect(
-            host     = DATABASE_HOST,
-            user     = DATABASE_USER,
-            password = DATABASE_PASSWORD,
-            database = DATABASE_NAME
-        )
-        return connection
-
-    except Error as error:
-        print(f"[Database Error] Could not connect to MySQL: {error}")
-        return None
-
-
-def close_database_connection(connection):
-    """
-    Safely close the database connection.
-    Always call this after you're done with the connection.
-    """
-    if connection and connection.is_connected():
-        connection.close()
-
-
-def run_query(sql_query, query_values=None):
-    """
-    Run a SELECT query and return the results as a list of dictionaries.
-    Each dictionary represents one row from the database.
-
-    Example:
-        rows = run_query("SELECT * FROM orders WHERE tailor_id = %s", (tailor_id,))
-    """
-    connection = create_database_connection()
-    if not connection:
+        q = get_client().table(table).select(select)
+        if filters:
+            for col, val in filters.items():
+                q = q.eq(col, val)
+        result = q.execute()
+        return result.data or []
+    except Exception as e:
+        print(f'[Supabase SELECT error] table={table} filters={filters}: {e}')
         return []
 
-    try:
-        # Use dictionary=True so results come back as {column: value} format
-        cursor = connection.cursor(dictionary=True)
-        cursor.execute(sql_query, query_values or ())
-        result_rows = cursor.fetchall()
-        return result_rows
 
-    except Error as error:
-        print(f"[Query Error] Failed to run SELECT query: {error}")
-        return []
-
-    finally:
-        close_database_connection(connection)
-
-
-def run_insert_or_update(sql_query, query_values=None):
+def sb_insert(table: str, data: dict) -> dict:
     """
-    Run an INSERT, UPDATE, or DELETE query.
-    Returns the ID of the last inserted row, or 0 if it's an update/delete.
-
-    Example:
-        new_id = run_insert_or_update(
-            "INSERT INTO messages (order_id, sender_id, message_text) VALUES (%s, %s, %s)",
-            (order_id, sender_id, message_text)
-        )
+    INSERT a row and return the inserted row as a dict.
+    Returns {} on error.
     """
-    connection = create_database_connection()
-    if not connection:
-        return 0
-
     try:
-        cursor = connection.cursor()
-        cursor.execute(sql_query, query_values or ())
-        connection.commit()  # Save the changes to the database
-        return cursor.lastrowid  # Return the ID of the newly inserted row
+        result = get_client().table(table).insert(data).execute()
+        return result.data[0] if result.data else {}
+    except Exception as e:
+        print(f'[Supabase INSERT error] table={table}: {e}')
+        return {}
 
-    except Error as error:
-        print(f"[Query Error] Failed to run INSERT/UPDATE query: {error}")
-        connection.rollback()  # Undo changes if something went wrong
-        return 0
 
-    finally:
-        close_database_connection(connection)
+def sb_update(table: str, data: dict, filters: dict) -> dict:
+    """
+    UPDATE rows matching filters and return the first updated row.
+    Returns {} on error.
+    """
+    try:
+        q = get_client().table(table).update(data)
+        for col, val in filters.items():
+            q = q.eq(col, val)
+        result = q.execute()
+        return result.data[0] if result.data else {}
+    except Exception as e:
+        print(f'[Supabase UPDATE error] table={table}: {e}')
+        return {}
+
+
+def sb_delete(table: str, filters: dict) -> bool:
+    """
+    DELETE rows matching filters.
+    Returns True on success, False on error.
+    """
+    try:
+        q = get_client().table(table).delete()
+        for col, val in filters.items():
+            q = q.eq(col, val)
+        q.execute()
+        return True
+    except Exception as e:
+        print(f'[Supabase DELETE error] table={table}: {e}')
+        return False
+
+
+def sb_auth_sign_up(email: str, password: str, metadata: dict | None = None):
+    """
+    Register a new user via Supabase Auth.
+    Supabase will send a verification email automatically.
+    Returns the Supabase AuthResponse.
+    """
+    client = get_anon_client()
+    return client.auth.sign_up({
+        'email': email,
+        'password': password,
+        'options': {'data': metadata or {}},
+    })
+
+
+def sb_auth_sign_in(email: str, password: str):
+    """
+    Log in an existing user via Supabase Auth.
+    Returns the Supabase AuthResponse (contains session + user).
+    """
+    client = get_anon_client()
+    return client.auth.sign_in_with_password({'email': email, 'password': password})
+
+
+def sb_auth_get_user(jwt: str):
+    """
+    Verify a JWT and return the Supabase User object.
+    Used to authenticate requests from the Flutter app.
+    """
+    client = get_anon_client()
+    return client.auth.get_user(jwt)

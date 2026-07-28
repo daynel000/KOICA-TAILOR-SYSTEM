@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../services/tailor_api_service.dart';
 import '../../services/order_repository.dart';
 import '../../session/tailor_session.dart';
+import '../login_screen.dart';
 
 class TailorHomeScreen extends StatefulWidget {
   const TailorHomeScreen({super.key});
@@ -29,23 +30,10 @@ class _TailorHomeScreenState extends State<TailorHomeScreen> {
   Future<void> _loadData() async {
     try {
       final data = await _api.fetchDashboardData();
-      final localOrders = await OrderRepository.getTailorOrdersRaw(TailorSession.currentProfileId, TailorSession.currentShopName);
-      if (localOrders.isNotEmpty) {
-        data['recent_orders'] = localOrders.take(5).toList();
-        data['active_orders'] = localOrders.where((o) => o['status'] != 'completed' && o['status'] != 'cancelled').length;
-      }
       setState(() { _dashboardData = data; _isLoading = false; });
     } catch (e) {
-      final localOrders = await OrderRepository.getTailorOrdersRaw(TailorSession.currentProfileId, TailorSession.currentShopName);
-      final activeCount = localOrders.where((o) => o['status'] != 'completed' && o['status'] != 'cancelled').length;
-      final completedCount = localOrders.where((o) => o['status'] == 'completed').length;
-      
       setState(() {
-        _dashboardData = {
-          'active_orders': activeCount > 0 ? activeCount : 3,
-          'this_week': completedCount > 0 ? completedCount : 5,
-          'recent_orders': localOrders.take(5).toList(),
-        };
+        _errorMessage = e.toString().replaceAll('Exception: ', '');
         _isLoading = false;
       });
     }
@@ -96,10 +84,24 @@ class _TailorHomeScreenState extends State<TailorHomeScreen> {
             Text('Could not load dashboard\n$_errorMessage',
                 style: const TextStyle(color: Color(0xFF64748B)), textAlign: TextAlign.center),
             const SizedBox(height: 16),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: brandGold),
-              onPressed: () { setState(() { _isLoading = true; _errorMessage = null; }); _loadData(); },
-              child: const Text('Try Again', style: TextStyle(color: Colors.white)),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: brandGold),
+                  onPressed: () { setState(() { _isLoading = true; _errorMessage = null; }); _loadData(); },
+                  child: const Text('Try Again', style: TextStyle(color: Colors.white)),
+                ),
+                const SizedBox(width: 12),
+                OutlinedButton(
+                  onPressed: () async {
+                    await TailorSession.clearSession();
+                    if (!context.mounted) return;
+                    Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const LoginScreen()));
+                  },
+                  child: const Text('Log Out'),
+                )
+              ],
             )
           ],
         ),

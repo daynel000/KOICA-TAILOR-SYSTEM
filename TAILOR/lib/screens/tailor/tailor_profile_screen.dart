@@ -89,6 +89,13 @@ class _TailorProfileScreenState extends State<TailorProfileScreen> {
     final totalClients = (p['total_clients'] ?? 0).toString();
     final yearsExp = (p['years_experience'] ?? 0).toString();
     final bio = p['bio'] ?? '';
+    
+    final storePictureUrl = p['store_picture'];
+    
+    List<String> portfolioPhotos = [];
+    if (p['portfolio_photos'] is List) {
+      portfolioPhotos = (p['portfolio_photos'] as List).map((e) => e.toString()).toList();
+    }
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20.0),
@@ -104,9 +111,13 @@ class _TailorProfileScreenState extends State<TailorProfileScreen> {
                     shape: BoxShape.circle,
                     border: Border.all(color: brandGold, width: 3),
                     color: brandNavy,
+                    image: storePictureUrl != null && storePictureUrl.isNotEmpty
+                        ? DecorationImage(image: NetworkImage(storePictureUrl), fit: BoxFit.cover)
+                        : null,
                   ),
-                  child: const Icon(Icons.person,
-                      size: 55, color: Colors.white),
+                  child: storePictureUrl == null || storePictureUrl.isEmpty
+                      ? const Icon(Icons.person, size: 55, color: Colors.white)
+                      : null,
                 ),
                 Positioned(
                   bottom: 0,

@@ -52,11 +52,6 @@ class _RegisterScreenState extends State<RegisterScreen>
 
     setState(() => _isLoading = true);
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final userKey = _usernameController.text.trim().toLowerCase();
-      await prefs.setString('registered_role_$userKey', _selectedRole);
-      await prefs.setString('registered_fullname_$userKey', _fullNameController.text.trim());
-
       await ApiService.register(
         fullName:        _fullNameController.text.trim(),
         shopName:        _selectedRole == 'tailor' ? _shopNameController.text.trim() : null,
@@ -69,13 +64,11 @@ class _RegisterScreenState extends State<RegisterScreen>
       );
 
       if (!mounted) return;
-      _showSnack('Account created successfully! Please log in.', _brandNavy);
+      _showSnack('Account created! Please check your email to verify before logging in.', _brandNavy);
       Navigator.of(context).pop(); // Go back to login
     } catch (e) {
       if (!mounted) return;
-      // Graceful offline fallback: allow account creation & return to login
-      _showSnack('Account created successfully! Please log in with your credentials.', _brandNavy);
-      Navigator.of(context).pop();
+      _showSnack('Error: ${e.toString().replaceAll('Exception: ', '')}', Colors.redAccent);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }

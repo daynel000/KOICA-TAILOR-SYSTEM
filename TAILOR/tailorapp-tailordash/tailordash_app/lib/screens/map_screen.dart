@@ -66,10 +66,7 @@ class _MapScreenState extends State<MapScreen> {
 
       // Get the current position
       final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          timeLimit: Duration(seconds: 10),
-        ),
+        desiredAccuracy: LocationAccuracy.high,
       );
 
       if (mounted) {

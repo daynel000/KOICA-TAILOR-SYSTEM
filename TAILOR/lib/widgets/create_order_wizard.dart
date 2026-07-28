@@ -22,11 +22,14 @@ class _CreateOrderWizardState extends State<CreateOrderWizard> {
   bool _isSubmitting = false;
 
   // Step 1: Measurements
-  late double _chestInches;
-  late double _waistInches;
-  late double _hipsInches;
-  late double _shouldersInches;
-  late double _inseamInches;
+  late double _bodyLength;
+  late double _shoulderWidth;
+  late double _chestWidth;
+  late double _chestCircumference;
+  late double _armLength;
+  late double _bicepCircumference;
+  late double _waistCircumference;
+  late double _hipsCircumference;
 
   // Controllers for manual inputs
   late TextEditingController _chestController;
@@ -52,17 +55,20 @@ class _CreateOrderWizardState extends State<CreateOrderWizard> {
   void initState() {
     super.initState();
     final scan = widget.savedScanResult;
-    _chestInches = scan?.chestInches ?? 34.0;
-    _waistInches = scan?.waistInches ?? 27.0;
-    _hipsInches = scan?.hipsInches ?? 37.0;
-    _shouldersInches = scan?.shouldersInches ?? 14.5;
-    _inseamInches = scan?.inseamInches ?? 29.0;
+    _bodyLength = scan?.bodyLength ?? 28.0;
+    _shoulderWidth = scan?.shoulderWidth ?? 18.0;
+    _chestWidth = scan?.chestWidth ?? 20.0;
+    _chestCircumference = scan?.chestCircumference ?? 40.0;
+    _armLength = scan?.armLength ?? 25.0;
+    _bicepCircumference = scan?.bicepCircumference ?? 14.0;
+    _waistCircumference = scan?.waistCircumference ?? 32.0;
+    _hipsCircumference = scan?.hipsCircumference ?? 38.0;
 
-    _chestController = TextEditingController(text: _chestInches.toStringAsFixed(1));
-    _waistController = TextEditingController(text: _waistInches.toStringAsFixed(1));
-    _hipsController = TextEditingController(text: _hipsInches.toStringAsFixed(1));
-    _shouldersController = TextEditingController(text: _shouldersInches.toStringAsFixed(1));
-    _inseamController = TextEditingController(text: _inseamInches.toStringAsFixed(1));
+    _chestController = TextEditingController(text: _chestCircumference.toStringAsFixed(1));
+    _waistController = TextEditingController(text: _waistCircumference.toStringAsFixed(1));
+    _hipsController = TextEditingController(text: _hipsCircumference.toStringAsFixed(1));
+    _shouldersController = TextEditingController(text: _shoulderWidth.toStringAsFixed(1));
+    _inseamController = TextEditingController(text: _bodyLength.toStringAsFixed(1));
 
     _selectedTailorId = widget.tailors.isNotEmpty ? widget.tailors.first.tailorId : '';
   }
@@ -82,20 +88,20 @@ class _CreateOrderWizardState extends State<CreateOrderWizard> {
 
   void _updateFieldValue(String fieldName, double newValue) {
     setState(() {
-      if (fieldName == 'Chest') {
-        _chestInches = newValue;
+      if (fieldName == 'Chest Circ.') {
+        _chestCircumference = newValue;
         _chestController.text = newValue.toStringAsFixed(1);
       } else if (fieldName == 'Waist') {
-        _waistInches = newValue;
+        _waistCircumference = newValue;
         _waistController.text = newValue.toStringAsFixed(1);
       } else if (fieldName == 'Hips') {
-        _hipsInches = newValue;
+        _hipsCircumference = newValue;
         _hipsController.text = newValue.toStringAsFixed(1);
       } else if (fieldName == 'Shoulders') {
-        _shouldersInches = newValue;
+        _shoulderWidth = newValue;
         _shouldersController.text = newValue.toStringAsFixed(1);
-      } else if (fieldName == 'Inseam') {
-        _inseamInches = newValue;
+      } else if (fieldName == 'Body Length') {
+        _bodyLength = newValue;
         _inseamController.text = newValue.toStringAsFixed(1);
       }
     });
@@ -104,16 +110,16 @@ class _CreateOrderWizardState extends State<CreateOrderWizard> {
   void _onFieldTextChanged(String fieldName, String text) {
     final parsed = double.tryParse(text);
     if (parsed != null) {
-      if (fieldName == 'Chest') {
-        _chestInches = parsed;
+      if (fieldName == 'Chest Circ.') {
+        _chestCircumference = parsed;
       } else if (fieldName == 'Waist') {
-        _waistInches = parsed;
+        _waistCircumference = parsed;
       } else if (fieldName == 'Hips') {
-        _hipsInches = parsed;
+        _hipsCircumference = parsed;
       } else if (fieldName == 'Shoulders') {
-        _shouldersInches = parsed;
-      } else if (fieldName == 'Inseam') {
-        _inseamInches = parsed;
+        _shoulderWidth = parsed;
+      } else if (fieldName == 'Body Length') {
+        _bodyLength = parsed;
       }
     }
   }
@@ -132,11 +138,14 @@ class _CreateOrderWizardState extends State<CreateOrderWizard> {
       'garment_type': finalGarmentType.isEmpty ? 'Custom Garment' : finalGarmentType,
       'fabric_material': finalFabricMaterial.isEmpty ? 'Custom Fabric' : finalFabricMaterial,
       'customer_notes': _notesController.text,
-      'chest_measurement_inches': _chestInches,
-      'waist_measurement_inches': _waistInches,
-      'hips_measurement_inches': _hipsInches,
-      'shoulders_measurement_inches': _shouldersInches,
-      'inseam_measurement_inches': _inseamInches,
+      'body_length': _bodyLength,
+      'shoulder_width': _shoulderWidth,
+      'chest_width': _chestWidth,
+      'chest_circumference': _chestCircumference,
+      'arm_length': _armLength,
+      'bicep_circumference': _bicepCircumference,
+      'waist_circumference': _waistCircumference,
+      'hips_circumference': _hipsCircumference,
     });
     if (mounted) setState(() => _isSubmitting = false);
   }
@@ -221,10 +230,12 @@ class _CreateOrderWizardState extends State<CreateOrderWizard> {
           const SizedBox(height: 10),
           GridView.count(crossAxisCount: 2, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(), mainAxisSpacing: 8, crossAxisSpacing: 8, childAspectRatio: 3,
             children: [
-              _ScanInfoCell('Chest', '${widget.savedScanResult!.chestInches}"', AppColors.primaryLight),
-              _ScanInfoCell('Waist', '${widget.savedScanResult!.waistInches}"', AppColors.emerald),
-              _ScanInfoCell('Hips', '${widget.savedScanResult!.hipsInches}"', AppColors.amber),
-              _ScanInfoCell('Shoulders', '${widget.savedScanResult!.shouldersInches}"', AppColors.textSecondary),
+              _ScanInfoCell('Body Length', '${widget.savedScanResult!.bodyLength}"', AppColors.primaryLight),
+              _ScanInfoCell('Shoulders', '${widget.savedScanResult!.shoulderWidth}"', AppColors.textSecondary),
+              _ScanInfoCell('Chest Circ.', '${widget.savedScanResult!.chestCircumference}"', AppColors.primaryLight),
+              _ScanInfoCell('Waist', '${widget.savedScanResult!.waistCircumference}"', AppColors.emerald),
+              _ScanInfoCell('Hips', '${widget.savedScanResult!.hipsCircumference}"', AppColors.amber),
+              _ScanInfoCell('Size', widget.savedScanResult!.recommendedSize, AppColors.textSecondary),
             ],
           ),
         ])),
@@ -239,11 +250,11 @@ class _CreateOrderWizardState extends State<CreateOrderWizard> {
         Text('MANUAL ADJUSTMENT (inches)', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.textSecondary, letterSpacing: 1)),
         const SizedBox(height: 12),
         for (final field in [
-          ('Chest', _chestInches, _chestController),
-          ('Waist', _waistInches, _waistController),
-          ('Hips', _hipsInches, _hipsController),
-          ('Shoulders', _shouldersInches, _shouldersController),
-          ('Inseam', _inseamInches, _inseamController),
+          ('Body Length', _bodyLength, _inseamController),
+          ('Shoulders', _shoulderWidth, _shouldersController),
+          ('Chest Circ.', _chestCircumference, _chestController),
+          ('Waist', _waistCircumference, _waistController),
+          ('Hips', _hipsCircumference, _hipsController),
         ]) Padding(
           padding: const EdgeInsets.only(bottom: 10),
           child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [

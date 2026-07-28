@@ -7,9 +7,9 @@ class TailorApiService {
   /// Base URL of the Flask backend.
   /// Use http://127.0.0.1:5000/api for web/Chrome.
   /// Use http://10.0.2.2:5000/api for Android emulator.
-  static const String baseUrl = 'http://127.0.0.1:5000/api';
+  static const String baseUrl = 'http://192.168.254.48:5000/api';
 
-  int get _tailorId {
+  String get _tailorId {
     if (!TailorSession.isLoggedIn()) throw Exception('Not logged in as tailor');
     return TailorSession.currentProfileId!;
   }
@@ -51,11 +51,11 @@ class TailorApiService {
         .get(Uri.parse('$baseUrl/dashboard/$_tailorId'))
         .timeout(const Duration(seconds: 10));
 
-    if (response.statusCode == 200) {
-      final body = json.decode(response.body) as Map<String, dynamic>;
-      if (body['status'] == 'success') return body['data'];
+    final body = json.decode(response.body) as Map<String, dynamic>;
+    if (response.statusCode == 200 && body['status'] == 'success') {
+      return body['data'];
     }
-    throw Exception('Failed to load dashboard (status ${response.statusCode})');
+    throw Exception(body['message'] ?? 'Failed to load dashboard (status ${response.statusCode})');
   }
 
   // ─── ORDERS ───────────────────────────────────────────────────────────────
@@ -72,7 +72,7 @@ class TailorApiService {
     throw Exception('Failed to load orders (status ${response.statusCode})');
   }
 
-  Future<void> updateOrderStatus(int orderId, String status, int progress) async {
+  Future<void> updateOrderStatus(String orderId, String status, int progress) async {
     final response = await http.put(
       Uri.parse('$baseUrl/orders/$orderId/status'),
       headers: {'Content-Type': 'application/json'},
@@ -123,6 +123,58 @@ class TailorApiService {
     if (response.statusCode != 200 || body['status'] != 'success') {
       throw Exception(body['message'] ?? 'Failed to update profile');
     }
+  }
+
+  // ─── PROFILE IMAGES ───────────────────────────────────────────────────────
+
+  Future<String> uploadStorePicture(List<int> bytes, String filename) async {
+    final uri = Uri.parse('$baseUrl/tailors/$_tailorId/store-picture');
+    final request = http.MultipartRequest('POST', uri);
+    request.files.add(http.MultipartFile.fromBytes(
+      'image',
+      bytes,
+      filename: filename,
+    ));
+    final response = await request.send();
+    final responseBody = await response.stream.bytesToString();
+    final body = json.decode(responseBody);
+    
+    if (response.statusCode == 200 && body['status'] == 'success') {
+      return body['data']['store_picture'];
+    }
+    throw Exception(body['message'] ?? 'Failed to upload store picture');
+  }
+
+  Future<List<dynamic>> uploadPortfolioPhoto(List<int> bytes, String filename) async {
+    final uri = Uri.parse('$baseUrl/tailors/$_tailorId/portfolio');
+    final request = http.MultipartRequest('POST', uri);
+    request.files.add(http.MultipartFile.fromBytes(
+      'image',
+      bytes,
+      filename: filename,
+    ));
+    final response = await request.send();
+    final responseBody = await response.stream.bytesToString();
+    final body = json.decode(responseBody);
+    
+    if (response.statusCode == 200 && body['status'] == 'success') {
+      return body['data']['portfolio_photos'];
+    }
+    throw Exception(body['message'] ?? 'Failed to upload portfolio photo');
+  }
+
+  Future<List<dynamic>> deletePortfolioPhoto(String url) async {
+    final response = await http.delete(
+      Uri.parse('$baseUrl/tailors/$_tailorId/portfolio'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({'url': url}),
+    ).timeout(const Duration(seconds: 10));
+
+    final body = json.decode(response.body);
+    if (response.statusCode == 200 && body['status'] == 'success') {
+      return body['data']['portfolio_photos'];
+    }
+    throw Exception(body['message'] ?? 'Failed to delete portfolio photo');
   }
 
   // ─── CHAT ─────────────────────────────────────────────────────────────────

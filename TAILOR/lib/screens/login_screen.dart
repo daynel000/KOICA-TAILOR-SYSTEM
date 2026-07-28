@@ -57,8 +57,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (isTailor) {
         await TailorSession.saveSession(
-          userId: int.tryParse(userInfo['user_id']?.toString() ?? '') ?? 0,
-          profileId: int.tryParse(userInfo['profile_id']?.toString() ?? '') ?? 0,
+          userId: userInfo['customer_id']?.toString() ?? userInfo['user_id']?.toString() ?? '',
+          profileId: userInfo['customer_id']?.toString() ?? userInfo['user_id']?.toString() ?? '',
           fullName: userInfo['full_name']?.toString() ?? 'Tailor',
           shopName: userInfo['shop_name']?.toString() ?? 'Tailor Shop',
         );
@@ -83,54 +83,8 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       }
     } catch (e) {
-      // Fallback for offline development / Quick Demo Logins / Registered Accounts:
-      final prefs = await SharedPreferences.getInstance();
-      final savedRole = prefs.getString('registered_role_${username.toLowerCase()}');
-
-      final lowerUser = username.toLowerCase();
-      final isTailor = savedRole == 'tailor' ||
-          lowerUser == 'tailor' ||
-          lowerUser == 'admin' ||
-          lowerUser.contains('tailor') ||
-          lowerUser.contains('shop') ||
-          lowerUser.contains('master');
-
-      if (isTailor) {
-        final formattedName = username.isNotEmpty
-            ? username[0].toUpperCase() + username.substring(1)
-            : 'Tailor';
-        await TailorSession.saveSession(
-          userId: 1,
-          profileId: 1,
-          fullName: formattedName,
-          shopName: '$formattedName\'s Tailoring',
-        );
-        if (!mounted) return;
-        _showSnack('Welcome back, $formattedName!', const Color(0xFF132238));
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const TailorMainShell()),
-        );
-      } else {
-        // Customer login -> Route to Customer Dashboard (MainShell)
-        final userKey = username.toLowerCase();
-        final savedName = prefs.getString('registered_fullname_$userKey');
-        final customerName = (savedName != null && savedName.isNotEmpty)
-            ? savedName
-            : (username.isNotEmpty ? username[0].toUpperCase() + username.substring(1) : 'Customer');
-
-        if (mounted) {
-          context.read<AppProvider>().setLoggedInCustomer(
-            fullName: customerName,
-            username: username,
-          );
-        }
-
-        if (!mounted) return;
-        _showSnack('Welcome back, $customerName!', const Color(0xFF132238));
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const MainShell()),
-        );
-      }
+      if (!mounted) return;
+      _showSnack('Invalid email or password. Please try again.', Colors.redAccent);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -222,10 +176,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
                   const SizedBox(height: 32),
 
-                  // Username Input Field
+                  // Email Input Field
                   TextFormField(
                     controller: _usernameController,
-                    keyboardType: TextInputType.name,
+                    keyboardType: TextInputType.emailAddress,
                     textInputAction: TextInputAction.next,
                     style: GoogleFonts.inter(
                       fontSize: 15,
@@ -233,7 +187,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       fontWeight: FontWeight.w500,
                     ),
                     decoration: InputDecoration(
-                      hintText: 'Username',
+                      hintText: 'Email',
                       hintStyle: GoogleFonts.inter(
                         color: hintColor,
                         fontSize: 15,
@@ -242,9 +196,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       prefixIcon: const Padding(
                         padding: EdgeInsets.symmetric(horizontal: 16.0),
                         child: Icon(
-                          Icons.person_outline_rounded,
+                          Icons.email_outlined,
                           color: Color(0xFF4A5568),
-                          size: 22,
+                          size: 20,
                         ),
                       ),
                       filled: true,
@@ -272,7 +226,10 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     validator: (value) {
                       if (value == null || value.trim().isEmpty) {
-                        return 'Please enter your username';
+                        return 'Please enter your email';
+                      }
+                      if (!value.contains('@')) {
+                        return 'Please enter a valid email containing @';
                       }
                       return null;
                     },
@@ -461,109 +418,6 @@ class _LoginScreenState extends State<LoginScreen> {
                           letterSpacing: 0.2,
                         ),
                       ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  // Demo Credentials Helper Box
-                  Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF1F5F9),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFFE2E8F0)),
-                    ),
-                    child: Column(
-                      children: [
-                        Text(
-                          'Quick Demo Logins',
-                          style: GoogleFonts.inter(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: const Color(0xFF64748B),
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: InkWell(
-                                onTap: () {
-                                  _usernameController.text = 'tailor';
-                                  _passwordController.text = 'password';
-                                },
-                                borderRadius: BorderRadius.circular(6),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(vertical: 8),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.circular(6),
-                                    border: Border.all(color: const Color(0xFFCBD5E1)),
-                                  ),
-                                  child: Column(
-                                    children: [
-                                      Text(
-                                        'Tailor',
-                                        style: GoogleFonts.inter(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w700,
-                                          color: brandNavy,
-                                        ),
-                                      ),
-                                      Text(
-                                        'tailor / password',
-                                        style: GoogleFonts.inter(
-                                          fontSize: 10,
-                                          color: hintColor,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: InkWell(
-                                onTap: () {
-                                  _usernameController.text = 'john_doe';
-                                  _passwordController.text = 'password';
-                                },
-                                borderRadius: BorderRadius.circular(6),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(vertical: 8),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.circular(6),
-                                    border: Border.all(color: const Color(0xFFCBD5E1)),
-                                  ),
-                                  child: Column(
-                                    children: [
-                                      Text(
-                                        'Customer',
-                                        style: GoogleFonts.inter(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w700,
-                                          color: brandNavy,
-                                        ),
-                                      ),
-                                      Text(
-                                        'john_doe / password',
-                                        style: GoogleFonts.inter(
-                                          fontSize: 10,
-                                          color: hintColor,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
                     ),
                   ),
 

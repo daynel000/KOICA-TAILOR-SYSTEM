@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/order_model.dart';
+import 'api_service.dart';
 
 /// Central repository for storing and synchronizing requests/orders
 /// between the Customer app and Tailor dashboard.
@@ -10,109 +11,22 @@ class OrderRepository {
   static List<Map<String, dynamic>> _cachedOrders = [];
   static bool _initialized = false;
 
-  /// Default initial orders for demo and offline persistence.
-  static final List<Map<String, dynamic>> _defaultOrders = [
-    {
-      'order_id': 'ord_101',
-      'customer_id': 'c1',
-      'customer_name': 'Sarah Jenkins',
-      'tailor_id': 't1',
-      'tailor_shop_name': 'Silhouettes Couture',
-      'garment_type': 'Custom Silk Dress',
-      'clothing_type': 'Custom Silk Dress',
-      'fabric_material': 'French Silk',
-      'status': 'in_progress',
-      'progress_percent': 65,
-      'status_updated_date': 'Today',
-      'estimated_completion_date': 'In 3 days',
-      'customer_notes': 'A-line cut with back zipper, floor length.',
-      'chest_measurement_inches': 36.5,
-      'waist_measurement_inches': 28.0,
-      'hips_measurement_inches': 38.0,
-      'shoulders_measurement_inches': 15.0,
-      'inseam_measurement_inches': 30.0,
-      'chest': 36.5,
-      'waist': 28.0,
-      'hip': 38.0,
-      'shoulder': 15.0,
-      'inseam': 30.0,
-      'inspiration_image_url': 'https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=500',
-      'order_created_date': '3 days ago',
-      'chat_messages': [],
-    },
-    {
-      'order_id': 'ord_102',
-      'customer_id': 'c2',
-      'customer_name': 'Michael Tan',
-      'tailor_id': 't1',
-      'tailor_shop_name': 'Silhouettes Couture',
-      'garment_type': '3-Piece Tuxedo Fit',
-      'clothing_type': '3-Piece Tuxedo Fit',
-      'fabric_material': 'Wool Blend',
-      'status': 'new',
-      'progress_percent': 20,
-      'status_updated_date': 'Yesterday',
-      'estimated_completion_date': 'In 7 days',
-      'customer_notes': 'Satin lapels with double vent.',
-      'chest_measurement_inches': 40.0,
-      'waist_measurement_inches': 34.0,
-      'hips_measurement_inches': 41.0,
-      'shoulders_measurement_inches': 18.5,
-      'inseam_measurement_inches': 32.0,
-      'chest': 40.0,
-      'waist': 34.0,
-      'hip': 41.0,
-      'shoulder': 18.5,
-      'inseam': 32.0,
-      'inspiration_image_url': 'https://images.unsplash.com/photo-1594938298603-c8148c4dae35?w=500',
-      'order_created_date': 'Yesterday',
-      'chat_messages': [],
-    },
-    {
-      'order_id': 'ord_103',
-      'customer_id': 'c3',
-      'customer_name': 'Maria Santos',
-      'tailor_id': 't2',
-      'tailor_shop_name': 'Master Cutters PH',
-      'garment_type': 'Evening Gown Alteration',
-      'clothing_type': 'Evening Gown Alteration',
-      'fabric_material': 'Premium Satin',
-      'status': 'completed',
-      'progress_percent': 100,
-      'status_updated_date': '2 days ago',
-      'estimated_completion_date': 'Completed',
-      'customer_notes': 'Take in 1 inch at waist.',
-      'chest_measurement_inches': 34.0,
-      'waist_measurement_inches': 26.5,
-      'hips_measurement_inches': 36.0,
-      'shoulders_measurement_inches': 14.5,
-      'inseam_measurement_inches': 29.0,
-      'chest': 34.0,
-      'waist': 26.5,
-      'hip': 36.0,
-      'shoulder': 14.5,
-      'inseam': 29.0,
-      'inspiration_image_url': 'https://images.unsplash.com/photo-1566174053879-31528523f8ae?w=500',
-      'order_created_date': '1 week ago',
-      'chat_messages': [],
-    },
-  ];
+  /// Default initial orders — intentionally empty.
+  /// Orders are loaded exclusively from the backend database.
+  static final List<Map<String, dynamic>> _defaultOrders = [];
 
   /// Initialize and load saved orders from storage.
   static Future<void> init() async {
     if (_initialized) return;
     try {
+      // Always start fresh — do not load from local cache.
+      // Real orders come from the backend via AppProvider.loadInitialData().
+      // Also clear any stale mock data that was persisted in previous versions.
       final prefs = await SharedPreferences.getInstance();
-      final jsonStr = prefs.getString(_storageKey);
-      if (jsonStr != null && jsonStr.isNotEmpty) {
-        final List<dynamic> decoded = jsonDecode(jsonStr);
-        _cachedOrders = decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
-      } else {
-        _cachedOrders = List<Map<String, dynamic>>.from(_defaultOrders);
-        await _persist();
-      }
+      await prefs.remove(_storageKey);
+      _cachedOrders = [];
     } catch (_) {
-      _cachedOrders = List<Map<String, dynamic>>.from(_defaultOrders);
+      _cachedOrders = [];
     }
     _initialized = true;
   }
@@ -153,7 +67,7 @@ class OrderRepository {
     }).toList();
   }
 
-  /// Save a new order request created by a customer.
+  /// Save a new order request created by a customer and push to Flask API backend.
   static Future<OrderModel> addOrder({
     required String tailorId,
     required String tailorShopName,
@@ -169,18 +83,37 @@ class OrderRepository {
   }) async {
     await init();
 
-    final orderId = 'ord_${DateTime.now().millisecondsSinceEpoch}';
+    int numericTailorId = 1;
+    final cleaned = tailorId.replaceAll(RegExp(r'[^0-9]'), '');
+    if (cleaned.isNotEmpty) {
+      numericTailorId = int.tryParse(cleaned) ?? 1;
+    }
+
+    int dbOrderId = 0;
+    try {
+      dbOrderId = await ApiService.submitOrder(
+        customerId: 1, // Default customer ID
+        tailorId: numericTailorId,
+        clothingType: garmentType,
+        description: '$garmentType ($fabricMaterial)',
+        notes: customerNotes,
+      );
+    } catch (_) {
+      // Offline fallback
+    }
+
+    final orderId = dbOrderId > 0 ? dbOrderId.toString() : 'ord_${DateTime.now().millisecondsSinceEpoch}';
     final newOrderMap = <String, dynamic>{
       'order_id': orderId,
-      'customer_id': 'c_current',
+      'customer_id': '1',
       'customer_name': customerName.isNotEmpty ? customerName : 'Customer',
-      'tailor_id': tailorId.isNotEmpty ? tailorId : 't1',
+      'tailor_id': numericTailorId.toString(),
       'tailor_shop_name': tailorShopName.isNotEmpty ? tailorShopName : 'Silhouettes Couture',
       'garment_type': garmentType.isNotEmpty ? garmentType : 'Custom Garment',
       'clothing_type': garmentType.isNotEmpty ? garmentType : 'Custom Garment',
       'fabric_material': fabricMaterial.isNotEmpty ? fabricMaterial : 'Custom Fabric',
-      'status': 'submitted',
-      'progress_percent': 20,
+      'status': 'new',
+      'progress_percent': 0,
       'status_updated_date': 'Just now',
       'estimated_completion_date': 'In 7 days',
       'customer_notes': customerNotes,
